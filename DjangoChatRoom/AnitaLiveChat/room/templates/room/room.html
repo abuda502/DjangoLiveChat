@@ -1,0 +1,175 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ room.name }} | {% endblock %}
+
+{% block content %}
+<div class="p-10 lg:p-20 text-center">
+    <h1 class="text-3xl lg:text-6xl text-white">{{ room.name }}</h1>
+</div>
+
+<div class="lg:w-2/4 mx-4 lg:mx-auto p-4 bg-white rounded-xl">
+    <div class="chat-messages space-y-3" id="chat-messages">
+        {% for m in messages %}<b>{{ m.user.username }}</b>: {{ m.content }}<br>{% endfor %}
+    </div>
+</div>
+
+<div class="lg:w-2/4 mt-6 mx-4 lg:mx-auto p-4 bg-white rounded-xl">
+    <form method="post" action="." class="flex" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="text" name="content" class="flex-1 mr-3" placeholder="Your message..." id="chat-message-input">
+        <input type="file" name="file" class="mr-3" id="chat-file-input">
+
+        <button 
+            class="px-5 py-3 rounded-xl text-white bg-teal-600 hover:bg-teal-700"
+            id="chat-message-submit">Send</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ room.slug|json_script:"json-roomname" }}
+{{ request.user.username|json_script:"json-username" }}
+
+<script>
+    
+    const roomName = JSON.parse(document.getElementById('json-roomname').textContent);
+    const userName = JSON.parse(document.getElementById('json-username').textContent);
+   // console.log('WebSocket URL:', 'ws://' + window.location.host + '/ws/' + roomName + '/');
+
+    const chatSocket = new WebSocket(
+        'ws://' + window.location.host + '/ws/' + roomName + '/'
+    );
+
+
+    chatSocket.onclose = function(e) {
+        console.log('onclose')
+    }
+
+    chatSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+    
+        if (data.message !== '') {
+            // check if a file is being received
+            if (data.fileName && data.fileSize && data.fileData) {
+                const message = `<b>${data.username}</b>: File "${data.fileName}" (${data.fileSize} bytes) was received: <a href="${data.fileData}" download="${data.fileName}">Download</a>`;
+                document.querySelector('#chat-messages').innerHTML += (message + '<br>');
+            } else {
+                const message = `<b>${data.username}</b>: ${data.message}`;
+                document.querySelector('#chat-messages').innerHTML += (message + '<br>');
+            }
+        } else {
+            alert('The message cannot be empty!')
+        }
+    
+        scrollToBottom();
+    };
+    
+    
+    
+
+    document.querySelector('#chat-message-input').focus();
+    document.querySelector('#chat-message-input').onkeyup = function(e) {
+        if (e.keyCode === 13) {
+            document.querySelector('#chat-message-submit').click();
+        }
+    };
+
+    document.querySelector('#chat-message-submit').onclick = function(e) {
+        e.preventDefault();
+      
+        const messageInputDom = document.querySelector('#chat-message-input');
+        const message = messageInputDom.value;
+        const chatFileInput = document.querySelector('#chat-file-input');
+        console.log("File input:", chatFileInput.files)  // add this line to print the file object
+    
+        if (chatFileInput.value !== '') {
+            const file = chatFileInput.files[0];
+            const fileSize = file.size;
+            const fileName = file.name;
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+    
+            reader.onloadend = function() {
+                const fileData = reader.result.split(',')[1];
+    
+                if (chatSocket.readyState !== WebSocket.OPEN) {
+                    console.error('WebSocket is not connected');
+                    return;
+                }
+    
+                chatSocket.send(JSON.stringify({
+                    'message': message,
+                    'username': userName,
+                    'room': roomName,
+                    'fileData': fileData,
+                    'fileName': fileName,
+                    'fileSize': fileSize
+                }));
+    
+                messageInputDom.value = '';
+                chatFileInput.value = ''; // clear the file input after sending
+            };
+        } else {
+            if (chatSocket.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket is not connected');
+                return;
+            }
+    
+            chatSocket.send(JSON.stringify({
+                'message': message,
+                'username': userName,
+                'room': roomName
+            }));
+    
+            messageInputDom.value = '';
+        }
+    
+        return false;
+    };
+    
+    chatFileInput.onchange = function(e) {
+        const file = e.target.files[0];
+        const fileSize = file.size;
+        const fileName = file.name;
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+    
+        reader.onloadend = function() {
+            const fileData = reader.result.split(',')[1];
+            const messageInputDom = document.querySelector('#chat-message-input');
+            const message = messageInputDom.value;
+    
+            if (chatSocket.readyState !== WebSocket.OPEN) {
+                console.error('WebSocket is not connected');
+                return;
+            }
+    
+            chatSocket.send(JSON.stringify({
+                'message': message,
+                'username': userName,
+                'room': roomName,
+                'fileData': fileData,
+                'fileName': fileName,
+                'fileSize': fileSize
+            }));
+    
+            messageInputDom.value = '';
+            chatFileInput.value = ''; // clear the file input after sending
+        };
+    };
+    
+      
+      /**
+      * A function for finding the messages element, and scroll to the bottom of it.
+      */
+      function scrollToBottom() {
+        const chatMessages = document.querySelector('#chat-messages');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+  
+      
+      // Add this below the function to trigger the scroll on load.
+      scrollToBottom();
+      
+</script>
+{% endblock %}

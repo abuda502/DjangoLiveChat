@@ -1,0 +1,13 @@
+{% extends 'core/base.html' %}
+
+{% block title %} AnitaLiveChat | {% endblock %}
+
+{% block content %}
+<div class="p-10 lg:p-20 text-center">
+    <div>
+        <h1 class="text-3xl lg:text-6xl text-white">Welcome {{ request.user.username }}</h1>
+    </div>
+    <pre>
+    <img src="https://d26a57ydsghvgx.cloudfront.net/content/blog/BlogImage_Chat.jpg" alt="chat image" class="mx-auto mb-10">
+</div>
+{% endblock %}
